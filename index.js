@@ -3,26 +3,32 @@ const axios = require('axios');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// ⚠️ BOT_TOKEN must be set as an environment variable in Render.
-const BOT_TOKEN = process.env.BOT_TOKEN; 
+/*
+====================================================
+📌 إعداد التوكن والرابط العام (Webhook URL)
+====================================================
+قم بتعديل المتغيرين أدناه حسب بياناتك:
+- BOT_TOKEN: توكن بوت تيليجرام
+- WEBHOOK_URL: رابط مشروعك على Render أو الاستضافة (بدون / في النهاية)
+====================================================
+*/
 
-// 🌐 The public URL of this application on Render (WEBHOOK_URL).
-const WEBHOOK_URL = process.env.WEBHOOK_URL; 
+const BOT_TOKEN = '8005112027:AAFz3kRjsHIL9StGAALX9uCWxrDAFtQPthc'; // ← ضع توكن بوتك هنا
+const WEBHOOK_URL = 'https://your-app-name.onrender.com'; // ← غيّر هذا إلى رابط مشروعك على Render
 
+// التحقق من القيم
 if (!BOT_TOKEN || !WEBHOOK_URL) {
-    console.error("Critical Error: BOT_TOKEN and WEBHOOK_URL must be set as environment variables.");
+    console.error("❌ خطأ: يجب تحديد BOT_TOKEN و WEBHOOK_URL داخل الكود.");
     process.exit(1);
 }
 
-// Map to store active ping intervals: { chatId: { url: string, intervalId: IntervalObject, isNotified: boolean } }
+// تخزين المهام النشطة
 const activePings = new Map();
-const PING_INTERVAL_MS = 10 * 1000; // 10 seconds
+const PING_INTERVAL_MS = 10 * 1000; // 10 ثوانٍ
 
 // ======================================================
-// 🛠️ Utility Functions
+// 🧩 دوال المساعدة
 // ======================================================
-
-// Function to send a message via Telegram API
 async function sendTelegramMessage(chatId, text, reply_markup = {}) {
     const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
     try {
@@ -38,10 +44,8 @@ async function sendTelegramMessage(chatId, text, reply_markup = {}) {
 }
 
 // ======================================================
-// 🏃 Background PING Engine
+// 🚀 دالة إرسال Ping
 // ======================================================
-
-// Function to send the actual HTTP ping request
 async function sendPing(url, chatId) {
     try {
         await axios.get(url, { timeout: 8000 }); 
@@ -49,34 +53,25 @@ async function sendPing(url, chatId) {
     } catch (error) {
         console.error(`[${chatId}] ❌ Ping failed for ${url}: ${error.message}`);
         
-        // Notify user only once upon first failure
         const pingData = activePings.get(chatId);
         if (pingData && !pingData.isNotified) {
-            sendTelegramMessage(chatId, `⚠️ **تنبيه:** فشل أول طلب Ping للرابط: \`${url}\`. تأكد من أن الرابط يعمل بشكل صحيح. سنستمر في المحاولة...`);
+            sendTelegramMessage(chatId, `⚠️ **تنبيه:** فشل أول طلب Ping للرابط: \`${url}\`. تأكد من أن الرابط يعمل.`);
             pingData.isNotified = true;
         }
     }
 }
 
 // ======================================================
-// ⚙️ PING Task Management
+// ⚙️ إدارة مهام Ping
 // ======================================================
-
 function startPinging(chatId, url) {
-    // Stop any previous task for the same user
-    stopPinging(chatId, false); 
-    
-    // Send first Ping immediately
+    stopPinging(chatId, false);
     sendPing(url, chatId);
 
-    // Start the periodic task (every 10 seconds)
     const intervalId = setInterval(() => sendPing(url, chatId), PING_INTERVAL_MS);
-    
-    // Save the task to the map
     activePings.set(chatId, { url, intervalId, isNotified: false });
     
     const intervalSeconds = PING_INTERVAL_MS / 1000;
-    
     const stopButton = { 
         inline_keyboard: [
             [{ text: "🛑 إيقاف المراقبة", callback_data: `stop_ping_${chatId}` }]
@@ -84,10 +79,10 @@ function startPinging(chatId, url) {
     };
     
     sendTelegramMessage(chatId, 
-        `🎉 **تم بدء المراقبة بنجاح!**\n\n` +
+        `🎉 **تم بدء المراقبة!**\n\n` +
         `🔗 الرابط: \`${url}\`\n` +
-        `⏱️ الفاصل الزمني: *${intervalSeconds} ثوانٍ*\n\n` +
-        `✅ سيظل البوت الخاص بك نشطًا الآن في الخلفية.`,
+        `⏱️ كل ${intervalSeconds} ثانية.\n\n` +
+        `✅ سيتم منع خمول مشروعك الآن.`,
         stopButton
     );
 }
@@ -99,7 +94,7 @@ function stopPinging(chatId, notify = true) {
         activePings.delete(chatId);
         
         if (notify) {
-            sendTelegramMessage(chatId, `❌ **تم إيقاف المراقبة!**\n\nتم إيقاف خدمة منع الخمول للرابط: \`${url}\`.`);
+            sendTelegramMessage(chatId, `❌ **تم إيقاف المراقبة!**\n\nالرابط: \`${url}\``);
         }
         return true;
     }
@@ -107,26 +102,20 @@ function stopPinging(chatId, notify = true) {
 }
 
 // ======================================================
-// 🤖 Webhook Handling (Receiving Telegram Updates)
+// 🤖 استقبال Webhook من تيليجرام
 // ======================================================
-
 app.use(express.json());
 
-// Webhook endpoint
 app.post(`/webhook/${BOT_TOKEN}`, (req, res) => {
     const update = req.body;
     
-    if (update.message) {
-        handleMessage(update.message);
-    } else if (update.callback_query) {
-        handleCallbackQuery(update.callback_query);
-    }
+    if (update.message) handleMessage(update.message);
+    else if (update.callback_query) handleCallbackQuery(update.callback_query);
     
-    // Always send 200 OK response immediately to Telegram
-    res.sendStatus(200); 
+    res.sendStatus(200);
 });
 
-// Process text messages
+// معالجة الأوامر النصية
 function handleMessage(message) {
     const chatId = message.chat.id;
     const text = message.text;
@@ -135,62 +124,45 @@ function handleMessage(message) {
 
     if (text === '/start') {
         sendTelegramMessage(chatId, 
-            `مرحباً بك في **بوت مراقب النشاط!** 🤖\n\n` +
-            `أنا هنا لمنع مشاريعك المستضافة (مثل Render) من الخمول عبر إرسال طلبات Keep-Alive كل 10 ثوانٍ.\n\n` +
-            `**طريقة الاستخدام:**\n` +
-            `1. **لبدء المراقبة:** أرسل الأمر التالي:\n` +
-            `   \`/ping <رابط مشروعك>\`\n` +
-            `   *مثال: /ping https://bot-telgram-4lwg.onrender.com*\n\n` +
-            `2. **للتحقق من الحالة:** أرسل \`/status\`\n` +
-            `3. **للإيقاف:** أرسل \`/stop\` أو استخدم زر الإيقاف.`
+            `مرحباً بك 👋\n\n` +
+            `أنا بوت لمراقبة مشاريعك ومنعها من النوم 💤\n\n` +
+            `استخدم:\n` +
+            `- \`/ping <رابط مشروعك>\` لبدء المراقبة\n` +
+            `- \`/status\` لمعرفة الحالة\n` +
+            `- \`/stop\` لإيقاف المراقبة`
         );
     } else if (text.startsWith('/ping ')) {
         const url = text.substring(6).trim();
-        // Simple URL validation
-        if (url.startsWith('http')) {
-            startPinging(chatId, url);
-        } else {
-            sendTelegramMessage(chatId, '❌ **خطأ:** يرجى إرسال رابط صحيح يبدأ بـ `http` أو `https`.');
-        }
+        if (url.startsWith('http')) startPinging(chatId, url);
+        else sendTelegramMessage(chatId, '❌ أدخل رابطًا صحيحًا يبدأ بـ http أو https.');
     } else if (text === '/status') {
         const currentPing = activePings.get(chatId);
         if (currentPing) {
             sendTelegramMessage(chatId, 
-                `🟢 **حالة المراقبة:** نشط\n` +
-                `🔗 الرابط: \`${currentPing.url}\`\n` +
-                `⏱️ الفاصل: 10 ثوانٍ\n\n` +
-                `البوت يعمل في الخلفية لمنع خمول مشروعك.`,
-                 { 
-                    inline_keyboard: [
-                        [{ text: "🛑 إيقاف المراقبة", callback_data: `stop_ping_${chatId}` }]
-                    ]
-                }
+                `🟢 **نشط**\n🔗 ${currentPing.url}\n⏱️ كل 10 ثوانٍ.`,
+                { inline_keyboard: [[{ text: "🛑 إيقاف", callback_data: `stop_ping_${chatId}` }]] }
             );
         } else {
-            sendTelegramMessage(chatId, '🔴 **حالة المراقبة:** متوقف. يرجى استخدام الأمر `/ping <رابطك>` للبدء.');
+            sendTelegramMessage(chatId, '🔴 لا يوجد مراقبة حالياً.');
         }
     } else if (text === '/stop') {
-        if (stopPinging(chatId)) {
-            // Stop message handled inside stopPinging
-        } else {
-            sendTelegramMessage(chatId, '❌ لا يوجد رابط فعال يتم مراقبته حاليًا لإيقافه.');
-        }
+        if (!stopPinging(chatId))
+            sendTelegramMessage(chatId, '❌ لا يوجد عملية نشطة لإيقافها.');
     } else {
-        sendTelegramMessage(chatId, '🤔 أمر غير معروف. للمساعدة أرسل `/start`.');
+        sendTelegramMessage(chatId, '🤖 أمر غير معروف. أرسل `/start` للمساعدة.');
     }
 }
 
-// Process inline button presses
+// أزرار الإيقاف
 function handleCallbackQuery(callbackQuery) {
     const chatId = callbackQuery.message.chat.id;
     const data = callbackQuery.data;
     
     if (data.startsWith('stop_ping_')) {
-        const targetChatId = parseInt(data.substring(10), 10);
+        const targetChatId = parseInt(data.split('_')[2], 10);
         
-        // Security check: only allow the user who started the ping to stop it.
         if (targetChatId !== chatId) {
-             axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
+            axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
                 callback_query_id: callbackQuery.id,
                 text: "لا يمكنك التحكم في مراقبة مستخدم آخر.",
                 show_alert: true
@@ -199,25 +171,23 @@ function handleCallbackQuery(callbackQuery) {
         }
 
         if (stopPinging(chatId)) {
-             // Edit the original message to reflect the stopped status
             axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
                 chat_id: chatId,
                 message_id: callbackQuery.message.message_id,
-                text: `✅ **تم الإيقاف بنجاح**\n\nتم إيقاف المراقبة للرابط: \`${activePings.get(chatId)?.url || "غير معروف"}\`.`,
+                text: `✅ **تم الإيقاف بنجاح**`,
                 parse_mode: 'Markdown'
             });
         }
-        
-        // Acknowledge the button press
+
         axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
             callback_query_id: callbackQuery.id,
-            text: "تم إيقاف المراقبة."
+            text: "تم الإيقاف."
         });
     }
 }
 
 // ======================================================
-// 🌐 Webhook Setup Endpoint (Run this once after deployment)
+// 🌐 إعداد Webhook
 // ======================================================
 app.get('/setup', async (req, res) => {
     const webhookUrl = `${WEBHOOK_URL}/webhook/${BOT_TOKEN}`;
@@ -226,26 +196,23 @@ app.get('/setup', async (req, res) => {
     try {
         const response = await axios.get(setWebhookUrl);
         if (response.data.ok) {
-            res.status(200).send(`✅ تم تعيين Webhook بنجاح إلى: ${webhookUrl}`);
-            console.log(`Webhook set successfully to: ${webhookUrl}`);
+            res.send(`✅ Webhook تم تعيينه بنجاح: ${webhookUrl}`);
+            console.log(`Webhook set to: ${webhookUrl}`);
         } else {
-            res.status(500).send(`❌ فشل تعيين Webhook: ${response.data.description}`);
-            console.error('Failed to set webhook:', response.data.description);
+            res.send(`❌ فشل التعيين: ${response.data.description}`);
         }
     } catch (error) {
-        res.status(500).send(`❌ خطأ في الاتصال بـ Telegram API: ${error.message}`);
-        console.error('API connection error:', error.message);
+        res.send(`❌ خطأ: ${error.message}`);
     }
 });
 
-// Basic health check endpoint
+// صفحة الفحص
 app.get('/', (req, res) => {
-    res.status(200).send("The Telegram Pinger Bot Webhook service is running.");
+    res.send("✅ Telegram Pinger Bot is running.");
 });
 
-// Start the server
+// تشغيل الخادم
 app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
-    // Instruction to the user
-    console.log(`To set the Webhook, visit: ${WEBHOOK_URL}/setup`);
+    console.log(`🚀 Server running on port ${port}`);
+    console.log(`لضبط الـ Webhook: ${WEBHOOK_URL}/setup`);
 });
