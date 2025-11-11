@@ -14,7 +14,7 @@ const port = process.env.PORT || 3000;
 */
 
 const BOT_TOKEN = '8005112027:AAFz3kRjsHIL9StGAALX9uCWxrDAFtQPthc'; // ← ضع توكن بوتك هنا
-const WEBHOOK_URL = 'https://your-app-name.onrender.com'; // ← غيّر هذا إلى رابط مشروعك على Render
+const WEBHOOK_URL = 'https://weep-1.onrender.com'; // ← غيّر هذا إلى رابط مشروعك على Render
 
 // التحقق من القيم
 if (!BOT_TOKEN || !WEBHOOK_URL) {
