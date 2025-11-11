@@ -1,22 +1,10 @@
 {
   "name": "telegram-pinger-webhook-bot",
   "version": "1.0.0",
-  "description": "Telegram Webhook Bot to manage and run continuous pings to prevent Render projects from idling.",
   "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
-  },
-  "keywords": [
-    "telegram",
-    "webhook",
-    "pinger",
-    "render",
-    "keep-alive"
-  ],
-  "author": "",
-  "license": "ISC",
+  "scripts": { "start": "node index.js" },
   "dependencies": {
-    "axios": "^1.7.2",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "axios": "^1.7.2"
   }
 }
